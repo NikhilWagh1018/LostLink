@@ -1,15 +1,30 @@
-{
-  "hosting": {
-    "public": ".",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**",
-      "README.md",
-      "firestore.rules",
-      "storage.rules"
-    ]
-  },
+﻿{
+  "hosting": [
+    {
+      "site": "lostlink-aa816",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "README.md",
+        "firestore.rules",
+        "storage.rules"
+      ]
+    },
+    {
+      "site": "lostlink",
+      "public": ".",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**",
+        "README.md",
+        "firestore.rules",
+        "storage.rules"
+      ]
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules"
   }
