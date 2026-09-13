@@ -168,6 +168,26 @@
     margin-top: 4px;
   }
 
+  #my-distance {
+    margin-top: 6px;
+    color: var(--ok);
+  }
+
+  #directions-btn {
+    display: none;
+    margin-top: 10px;
+    background: var(--signal);
+    color: #1A1006;
+    text-align: center;
+    text-decoration: none;
+    padding: 9px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    border-radius: 3px;
+  }
+  #directions-btn:hover { background: #f0b25b; }
+
   #session-select {
     width: 100%;
     background: var(--bg);
@@ -243,6 +263,8 @@
       <div class="label">Last report</div>
       <div class="value stale mono" id="last-seen">No data yet</div>
       <div class="coords" id="last-coords"></div>
+      <div class="coords mono" id="my-distance"></div>
+      <a id="directions-btn" href="#" target="_blank" rel="noopener">Get Directions →</a>
       <select id="session-select">
         <option value="">All sessions</option>
       </select>
@@ -278,11 +300,14 @@
   const lastSeenEl = document.getElementById("last-seen");
   const lastCoordsEl = document.getElementById("last-coords");
   const photoListEl = document.getElementById("photo-list");
+  const directionsBtn = document.getElementById("directions-btn");
+  const myDistanceEl = document.getElementById("my-distance");
 
   let map, trailLine, currentMarker;
   let unsubLocations = null;
   let unsubPhotos = null;
   const knownSessions = new Set();
+  let myLat = null, myLng = null;
 
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -319,6 +344,7 @@
       }).addTo(map);
       trailLine = L.polyline([], { color: "#E8A33D", weight: 3 }).addTo(map);
     }
+    startMyLocationWatch();
     subscribeLocations();
     subscribePhotos();
   }
@@ -326,6 +352,40 @@
   function teardownConsole() {
     if (unsubLocations) unsubLocations();
     if (unsubPhotos) unsubPhotos();
+  }
+
+  function startMyLocationWatch() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.watchPosition(
+      (pos) => {
+        myLat = pos.coords.latitude;
+        myLng = pos.coords.longitude;
+      },
+      (err) => console.warn("Own location unavailable:", err.message),
+      { enableHighAccuracy: true, maximumAge: 10000 }
+    );
+  }
+
+  function haversineMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function bearingCompass(lat1, lng1, lat2, lng2) {
+    const toRad = (d) => (d * Math.PI) / 180;
+    const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
+    const x =
+      Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+    const deg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+    const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+    return dirs[Math.round(deg / 45) % 8];
   }
 
   function subscribeLocations() {
@@ -351,6 +411,8 @@
         lastSeenEl.textContent = "No data yet";
         lastSeenEl.className = "value stale mono";
         lastCoordsEl.textContent = "";
+        myDistanceEl.textContent = "";
+        directionsBtn.style.display = "none";
         return;
       }
 
@@ -375,6 +437,20 @@
       lastCoordsEl.textContent =
         `${latest.data.lat.toFixed(6)}, ${latest.data.lng.toFixed(6)}` +
         (latest.data.accuracy ? `  ±${Math.round(latest.data.accuracy)}m` : "");
+
+      // Directions button -> hands off full turn-by-turn nav to Google Maps
+      directionsBtn.href = `https://www.google.com/maps/dir/?api=1&destination=${latest.data.lat},${latest.data.lng}&travelmode=driving`;
+      directionsBtn.style.display = "block";
+
+      // Live distance + bearing from your own current position
+      if (myLat !== null && myLng !== null) {
+        const dist = haversineMeters(myLat, myLng, latest.data.lat, latest.data.lng);
+        const dir = bearingCompass(myLat, myLng, latest.data.lat, latest.data.lng);
+        const distText = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`;
+        myDistanceEl.textContent = `${distText} ${dir} from you`;
+      } else {
+        myDistanceEl.textContent = "";
+      }
     }, (err) => {
       console.error(err);
     });
