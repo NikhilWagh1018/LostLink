@@ -26,7 +26,12 @@ service cloud.firestore {
     }
 
     match /photos/{docId} {
-      allow create: if isAuthed();
+      // Photos are stored as a base64 dataUrl field directly on the
+      // document (no Firebase Storage, to stay on the free Spark plan) —
+      // capped client-side in locate.html to stay well under 1MB.
+      allow create: if isAuthed()
+        && request.resource.data.dataUrl is string
+        && request.resource.data.dataUrl.size() < 900000;
       allow update, delete: if false;
       allow read: if isRealUser();
     }

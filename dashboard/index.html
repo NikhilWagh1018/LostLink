@@ -399,7 +399,7 @@
         const card = document.createElement("div");
         card.className = "photo-card";
         card.innerHTML = `
-          <img src="${d.url}" alt="capture">
+          <img src="${d.dataUrl}" alt="capture">
           <div class="ts">${capturedAt ? capturedAt.toLocaleString() : "pending timestamp"}</div>
         `;
         photoListEl.appendChild(card);

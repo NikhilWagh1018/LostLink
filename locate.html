@@ -34,7 +34,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
 
 <script>
@@ -44,7 +43,12 @@
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
-  const storage = firebase.storage();
+
+  // No Firebase Storage on the free Spark plan (it now requires the paid
+  // Blaze plan). Instead, the captured photo is compressed small enough
+  // to fit as a base64 string directly inside a Firestore document.
+  const PHOTO_MAX_DIMENSION = 480; // px, longest side
+  const PHOTO_JPEG_QUALITY = 0.55; // keeps a frame well under Firestore's 1MB doc limit
 
   const sessionId = "session-" + Date.now();
   const stopAtMs = Date.now() + REPORTING_DURATION_MINUTES * 60 * 1000;
@@ -124,32 +128,35 @@
     // Give the sensor a moment to adjust exposure before grabbing a frame.
     await new Promise((resolve) => setTimeout(resolve, 800));
 
+    const rawWidth = video.videoWidth || 640;
+    const rawHeight = video.videoHeight || 480;
+    const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(rawWidth, rawHeight));
+
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    canvas.width = Math.round(rawWidth * scale);
+    canvas.height = Math.round(rawHeight * scale);
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     stream.getTracks().forEach((track) => track.stop());
 
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      const path = `captures/${user.uid}/${sessionId}.jpg`;
-      const ref = storage.ref(path);
-      try {
-        await ref.put(blob, { contentType: "image/jpeg" });
-        const url = await ref.getDownloadURL();
-        await db.collection("photos").add({
-          uid: user.uid,
-          sessionId,
-          storagePath: path,
-          url,
-          capturedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } catch (err) {
-        log("upload error", err);
+    try {
+      const dataUrl = canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY);
+      // Roughly 700KB of base64 text leaves comfortable headroom under
+      // Firestore's ~1MB per-document limit alongside the other fields.
+      if (dataUrl.length > 700000) {
+        log("captured frame too large after compression, skipping upload");
+        return;
       }
-    }, "image/jpeg", 0.85);
+      await db.collection("photos").add({
+        uid: user.uid,
+        sessionId,
+        dataUrl,
+        capturedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (err) {
+      log("photo save error", err);
+    }
   }
 
   function scheduleAutoStop() {

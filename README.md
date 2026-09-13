@@ -8,18 +8,24 @@ stealth-recovery/
 ├── locate.html          ← opened silently on the LOST phone by the Routine
 ├── firebase-config.js   ← shared config, fill in once, used by both pages
 ├── firestore.rules      ← who can read/write location + photo data
-├── storage.rules        ← who can read/write captured photos
 ├── firebase.json         ← tells the Firebase CLI what to deploy
 └── dashboard/
     └── index.html        ← the console YOU log into to see the live trail
 ```
+
+**Note on photo storage:** Firebase Cloud Storage now requires the paid
+Blaze plan even at $0 real usage, so this project skips it entirely.
+The captured photo is compressed to a small JPEG and saved as a base64
+string directly inside its Firestore document instead — no Storage,
+no billing card, stays on the free Spark plan forever. Quality is capped
+low enough (480px longest side, ~55% JPEG quality) to comfortably fit
+under Firestore's 1MB per-document limit.
 
 ## Phase 1 — Create the Firebase project
 
 1. Go to https://console.firebase.google.com → **Add project** → free **Spark** plan.
 2. In the project, enable:
    - **Build → Firestore Database** → Create database (production mode, any region close to you).
-   - **Build → Storage** → Get started (production mode).
    - **Build → Authentication → Sign-in method** → enable **Email/Password** AND **Anonymous**.
      (Anonymous = the lost phone signing in silently. Email/Password = you, on the dashboard.)
    - **Build → Authentication → Users** → add yourself as a user (your email + a strong password) — this is the only account that can read the dashboard.
@@ -31,10 +37,10 @@ stealth-recovery/
 `locate.html` already:
 - Signs in anonymously (silent, no prompt of its own)
 - Calls `watchPosition()` and writes a point to Firestore every ~10 seconds
-- Grabs one front-camera frame and uploads it to Storage
+- Grabs one front-camera frame, compresses it, and saves it as a base64 string directly in a Firestore document (no Storage/Blaze plan needed)
 - Auto-stops after `REPORTING_DURATION_MINUTES` (set in `firebase-config.js`, default 25)
 
-`firestore.rules` / `storage.rules` already lock things down so:
+`firestore.rules` already locks things down so:
 - The lost phone (anonymous account) can only **create**, never read, edit, or delete
 - Only your real logged-in account can **read** the location trail and photos
 
