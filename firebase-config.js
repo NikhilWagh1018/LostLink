@@ -1,21 +1,11 @@
-// ============================================================
-// FIREBASE CONFIG — fill this in after Phase 1 (Firebase Console setup)
-// Firebase Console → Project Settings → General → "Your apps" → Web app → Config
-// This file is loaded by BOTH locate.html and dashboard/index.html
-// ============================================================
-const firebaseConfig = {
-  apiKey: "REPLACE_ME",
-  authDomain: "REPLACE_ME.firebaseapp.com",
-  projectId: "REPLACE_ME",
-  storageBucket: "REPLACE_ME.appspot.com",
-  messagingSenderId: "REPLACE_ME",
-  appId: "REPLACE_ME"
+﻿const firebaseConfig = {
+  apiKey: "AIzaSyB3TGVF1rLoxww7fv4MDHkuw4uj2oAyUE8",
+  authDomain: "lostlink-aa816.firebaseapp.com",
+  projectId: "lostlink-aa816",
+  storageBucket: "lostlink-aa816.firebasestorage.app",
+  messagingSenderId: "653796921181",
+  appId: "1:653796921181:web:834293c25a7423b4d462b4"
 };
 
-// How long (in minutes) locate.html should keep reporting position after
-// a single trigger before it automatically stops. Open decision #2 from
-// the context doc — 25 minutes is a reasonable default, tune as you like.
 const REPORTING_DURATION_MINUTES = 25;
-
-// How often (in seconds) to write a fresh GPS point while active.
 const LOCATION_WRITE_INTERVAL_SECONDS = 10;
