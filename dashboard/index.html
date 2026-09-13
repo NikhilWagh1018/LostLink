@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recover — Console</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0E1512;
+    --panel: #131C18;
+    --line: #24322C;
+    --text: #EDE7DA;
+    --text-dim: #8A968E;
+    --signal: #E8A33D;
+    --signal-dim: #6B4F26;
+    --ok: #6FCF97;
+    --danger: #E0654B;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  /* ---------- Login gate ---------- */
+  #gate {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  #gate .mark {
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    color: var(--signal);
+  }
+
+  #gate .mark::before {
+    content: "●";
+    margin-right: 8px;
+    font-size: 9px;
+    vertical-align: middle;
+  }
+
+  #gate form {
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  #gate input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    padding: 10px 2px;
+    outline: none;
+  }
+
+  #gate input:focus { border-bottom-color: var(--signal); }
+
+  #gate button {
+    margin-top: 8px;
+    background: var(--signal);
+    color: #1A1006;
+    border: none;
+    padding: 12px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  #gate button:hover { background: #f0b25b; }
+
+  #gate-error {
+    color: var(--danger);
+    font-size: 13px;
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 16px;
+  }
+
+  /* ---------- Console layout ---------- */
+  #console { display: none; height: 100%; }
+  #console.active { display: grid; grid-template-columns: 1fr 340px; }
+
+  #map { height: 100%; background: #0A0F0C; }
+
+  #sidebar {
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #sidebar header {
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  #sidebar header .title {
+    font-weight: 600;
+    font-size: 15px;
+  }
+
+  #sidebar header .title .mark {
+    color: var(--signal);
+    font-size: 9px;
+    margin-right: 6px;
+  }
+
+  #logout {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  #logout:hover { color: var(--text); border-color: var(--text-dim); }
+
+  #status-block {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  #status-block .label {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+
+  #status-block .value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+  }
+
+  #status-block .value.live { color: var(--ok); }
+  #status-block .value.stale { color: var(--text-dim); }
+
+  #status-block .coords {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  #session-select {
+    width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    padding: 8px;
+    margin-top: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+  }
+
+  #photo-feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+
+  #photo-feed .label {
+    color: var(--text-dim);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+
+  .photo-card {
+    margin-bottom: 16px;
+  }
+
+  .photo-card img {
+    width: 100%;
+    display: block;
+    border: 1px solid var(--line);
+  }
+
+  .photo-card .ts {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  .empty-note {
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<!-- Login gate -->
+<div id="gate">
+  <div class="mark">RECOVER — SIGN IN</div>
+  <form id="login-form">
+    <input type="email" id="email" placeholder="email" autocomplete="username" required>
+    <input type="password" id="password" placeholder="password" autocomplete="current-password" required>
+    <button type="submit">Enter console</button>
+  </form>
+  <div id="gate-error" class="mono"></div>
+</div>
+
+<!-- Main console -->
+<div id="console">
+  <div id="map"></div>
+  <div id="sidebar">
+    <header>
+      <div class="title"><span class="mark">●</span>Recover console</div>
+      <button id="logout">Sign out</button>
+    </header>
+
+    <div id="status-block">
+      <div class="label">Last report</div>
+      <div class="value stale mono" id="last-seen">No data yet</div>
+      <div class="coords" id="last-coords"></div>
+      <select id="session-select">
+        <option value="">All sessions</option>
+      </select>
+    </div>
+
+    <div id="photo-feed">
+      <div class="label">Captured photos</div>
+      <div id="photo-list"><div class="empty-note">No photos received yet.</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="../firebase-config.js"></script>
+
+<script>
+(function () {
+  "use strict";
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  const gate = document.getElementById("gate");
+  const consoleEl = document.getElementById("console");
+  const loginForm = document.getElementById("login-form");
+  const gateError = document.getElementById("gate-error");
+  const logoutBtn = document.getElementById("logout");
+  const sessionSelect = document.getElementById("session-select");
+  const lastSeenEl = document.getElementById("last-seen");
+  const lastCoordsEl = document.getElementById("last-coords");
+  const photoListEl = document.getElementById("photo-list");
+
+  let map, trailLine, currentMarker;
+  let unsubLocations = null;
+  let unsubPhotos = null;
+  const knownSessions = new Set();
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    gateError.textContent = "";
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    try {
+      await auth.signInWithEmailAndPassword(email, password);
+    } catch (err) {
+      gateError.textContent = err.message;
+    }
+  });
+
+  logoutBtn.addEventListener("click", () => auth.signOut());
+
+  auth.onAuthStateChanged((user) => {
+    if (user && !user.isAnonymous) {
+      gate.style.display = "none";
+      consoleEl.classList.add("active");
+      initConsole();
+    } else {
+      consoleEl.classList.remove("active");
+      gate.style.display = "flex";
+      teardownConsole();
+    }
+  });
+
+  function initConsole() {
+    if (!map) {
+      map = L.map("map", { zoomControl: true }).setView([20, 0], 3);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 19
+      }).addTo(map);
+      trailLine = L.polyline([], { color: "#E8A33D", weight: 3 }).addTo(map);
+    }
+    subscribeLocations();
+    subscribePhotos();
+  }
+
+  function teardownConsole() {
+    if (unsubLocations) unsubLocations();
+    if (unsubPhotos) unsubPhotos();
+  }
+
+  function subscribeLocations() {
+    const sessionFilter = sessionSelect.value;
+    if (unsubLocations) unsubLocations();
+
+    let query = db.collection("locations").orderBy("capturedAt", "asc").limitToLast(500);
+    if (sessionFilter) query = query.where("sessionId", "==", sessionFilter);
+
+    unsubLocations = query.onSnapshot((snap) => {
+      const points = [];
+      snap.forEach((doc) => {
+        const d = doc.data();
+        knownSessions.add(d.sessionId);
+        if (typeof d.lat === "number" && typeof d.lng === "number") {
+          points.push({ latlng: [d.lat, d.lng], data: d });
+        }
+      });
+
+      refreshSessionOptions();
+
+      if (points.length === 0) {
+        lastSeenEl.textContent = "No data yet";
+        lastSeenEl.className = "value stale mono";
+        lastCoordsEl.textContent = "";
+        return;
+      }
+
+      const latlngs = points.map((p) => p.latlng);
+      trailLine.setLatLngs(latlngs);
+
+      const latest = points[points.length - 1];
+      if (currentMarker) map.removeLayer(currentMarker);
+      currentMarker = L.circleMarker(latest.latlng, {
+        radius: 8,
+        color: "#E8A33D",
+        fillColor: "#E8A33D",
+        fillOpacity: 0.9
+      }).addTo(map);
+
+      map.fitBounds(trailLine.getBounds(), { padding: [40, 40], maxZoom: 17 });
+
+      const capturedAt = latest.data.capturedAt?.toDate ? latest.data.capturedAt.toDate() : new Date();
+      const ageMs = Date.now() - capturedAt.getTime();
+      lastSeenEl.textContent = capturedAt.toLocaleString();
+      lastSeenEl.className = ageMs < 2 * 60 * 1000 ? "value live mono" : "value stale mono";
+      lastCoordsEl.textContent =
+        `${latest.data.lat.toFixed(6)}, ${latest.data.lng.toFixed(6)}` +
+        (latest.data.accuracy ? `  ±${Math.round(latest.data.accuracy)}m` : "");
+    }, (err) => {
+      console.error(err);
+    });
+  }
+
+  function subscribePhotos() {
+    const sessionFilter = sessionSelect.value;
+    if (unsubPhotos) unsubPhotos();
+
+    let query = db.collection("photos").orderBy("capturedAt", "desc").limit(20);
+    if (sessionFilter) query = query.where("sessionId", "==", sessionFilter);
+
+    unsubPhotos = query.onSnapshot((snap) => {
+      if (snap.empty) {
+        photoListEl.innerHTML = '<div class="empty-note">No photos received yet.</div>';
+        return;
+      }
+      photoListEl.innerHTML = "";
+      snap.forEach((doc) => {
+        const d = doc.data();
+        const capturedAt = d.capturedAt?.toDate ? d.capturedAt.toDate() : null;
+        const card = document.createElement("div");
+        card.className = "photo-card";
+        card.innerHTML = `
+          <img src="${d.url}" alt="capture">
+          <div class="ts">${capturedAt ? capturedAt.toLocaleString() : "pending timestamp"}</div>
+        `;
+        photoListEl.appendChild(card);
+      });
+    }, (err) => {
+      console.error(err);
+    });
+  }
+
+  function refreshSessionOptions() {
+    const existing = new Set(Array.from(sessionSelect.options).map((o) => o.value));
+    knownSessions.forEach((sid) => {
+      if (!existing.has(sid)) {
+        const opt = document.createElement("option");
+        opt.value = sid;
+        opt.textContent = sid;
+        sessionSelect.appendChild(opt);
+      }
+    });
+  }
+
+  sessionSelect.addEventListener("change", () => {
+    subscribeLocations();
+    subscribePhotos();
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isRealUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // captures/{uid}/{sessionId}.jpg
+    match /captures/{uid}/{fileName} {
+      // The lost phone (anonymous) may only write into its OWN uid folder,
+      // never overwrite another user's captures, and cannot read anything back.
+      allow write: if isAuthed()
+        && request.auth.uid == uid
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if isRealUser();
+    }
+  }
+}

@@ -1,0 +1,34 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isRealUser() {
+      // The dashboard signs in with a real email/password account.
+      // The lost phone (locate.html) signs in anonymously.
+      // This distinguishes the two so only YOU can read the data.
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    match /locations/{docId} {
+      // Any signed-in client (including anonymous, i.e. the lost phone)
+      // may write a location point, but never edit or delete one after
+      // the fact — this is an append-only evidence log.
+      allow create: if isAuthed();
+      allow update, delete: if false;
+      // Only your real dashboard login may read the trail.
+      allow read: if isRealUser();
+    }
+
+    match /photos/{docId} {
+      allow create: if isAuthed();
+      allow update, delete: if false;
+      allow read: if isRealUser();
+    }
+  }
+}
