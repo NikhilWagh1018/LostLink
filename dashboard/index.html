@@ -55,6 +55,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   display: flex; align-items: center; justify-content: center; color: #fff;
 }
 .recover-pin .shadow-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(0,0,0,.28); margin-top: 2px; }
+.recover-marker { cursor: pointer; }
 
 /* floating map buttons */
 .map-fab {
@@ -90,7 +91,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 
 .sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 16px; }
 .sheet-header .title { font-size: 20px; font-weight: 600; }
-.icon-btn-flat { background: none; border: none; color: var(--text-dim-light); font-size: 20px; cursor: pointer; padding: 6px; line-height: 1; }
+.header-actions { display: flex; align-items: center; gap: 4px; }
+.icon-btn-flat { background: none; border: none; color: var(--text-dim-light); font-size: 20px; cursor: pointer; padding: 6px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+.icon-btn-flat.spinning svg { animation: spin .6s linear; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .card { background: var(--sheet-raised); border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; }
 
@@ -144,7 +148,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 #lightbox .lb-close { position: absolute; top: calc(16px + env(safe-area-inset-top)); right: 16px; background: rgba(255,255,255,.15); border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer; }
 #lightbox .lb-cap { position: absolute; bottom: calc(24px + env(safe-area-inset-bottom)); color: #ddd; font-size: 13px; font-family: 'IBM Plex Mono', monospace; }
 
-/* full-screen overlay panel: sync log + photo grid */
+/* full-screen overlay panel: sync log (trajectory map) + photo grid */
 #overlay-panel { position: fixed; inset: 0; background: var(--sheet); z-index: 850; display: none; flex-direction: column; }
 #overlay-panel.visible { display: flex; }
 #overlay-header { display: flex; align-items: center; justify-content: space-between; padding: calc(16px + env(safe-area-inset-top)) 18px 14px; border-bottom: 1px solid rgba(255,255,255,.08); flex-shrink: 0; }
@@ -152,9 +156,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 #overlay-close { background: var(--chip); border: none; color: var(--text-light); width: 34px; height: 34px; border-radius: 50%; font-size: 15px; cursor: pointer; }
 #overlay-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 18px calc(24px + env(safe-area-inset-bottom)); }
 
-.sync-log-row { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
-.sync-log-row .slr-coords { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-light); }
-.sync-log-row .slr-time { font-size: 11px; color: var(--text-dim-light); white-space: nowrap; margin-left: 10px; }
+#sync-map { height: 44vh; border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
+#sync-point-detail button { background: var(--accent); color: #fff; border: none; padding: 10px 16px; border-radius: 10px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; }
 
 .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .photo-grid img { width: 100%; aspect-ratio: 1; border-radius: 10px; object-fit: cover; cursor: pointer; }
@@ -204,7 +207,12 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
     <div id="sheet-scroll">
       <div class="sheet-header">
         <div class="title">LostLink</div>
-        <button id="more-btn" class="icon-btn-flat" type="button" aria-label="More options">&#8942;</button>
+        <div class="header-actions">
+          <button id="refresh-btn" class="icon-btn-flat" type="button" aria-label="Refresh data">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          </button>
+          <button id="more-btn" class="icon-btn-flat" type="button" aria-label="More options">&#8942;</button>
+        </div>
       </div>
 
       <div class="card">
@@ -312,6 +320,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   const backdrop = document.getElementById("sheet-backdrop");
   const menuBtn = document.getElementById("menu-btn");
   const recenterBtn = document.getElementById("recenter-btn");
+  const refreshBtn = document.getElementById("refresh-btn");
 
   const batteryValueEl = document.getElementById("battery-value");
   const deviceSubEl = document.getElementById("device-sub");
@@ -346,7 +355,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 
   const toastEl = document.getElementById("toast");
 
-  let map, trailLine, currentMarker;
+  let map, currentMarker;
   let unsubLocations = null;
   let unsubPhotos = null;
   const knownSessions = new Map(); // sessionId -> last capturedAt
@@ -358,8 +367,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   let latestBearing = "";
   let latestDist = "";
   let showAllSessions = false;
-  let recentSyncedPoints = []; // most-recent-first, for the Notebook log
+  let recentSyncedPoints = []; // most-recent-first, for the Notebook trajectory view
   let allPhotos = []; // cache of latest photo docs, for the "See all" grid
+  let syncMapInstance = null; // Leaflet instance for the trajectory overlay, recreated each time it opens
 
   // ---------- Auth ----------
   loginForm.addEventListener("submit", async (e) => {
@@ -397,12 +407,25 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   let sheetHeightPx = 0;
   let collapsedOffsetPx = 148; // px of sheet visible when collapsed (handle + header + device card peek)
   let expanded = false;
-  let dragStartY = 0;
-  let dragStartTranslate = 0;
   let dragging = false;
+
+  // A drag can start from anywhere in the sheet, not just the handle. While expanded, a
+  // drag only takes over the sheet once the inner list is scrolled to the top and the user
+  // pulls down — otherwise the gesture is left alone so list/photo/map scrolling still works.
+  let gestureActive = false;
+  let gestureMoved = false;
+  let gestureAllowed = true;
+  let gestureIgnored = false;
+  let gestureStartY = 0;
+  let gestureStartTranslate = 0;
 
   function measureSheet() {
     sheetHeightPx = sheet.getBoundingClientRect().height;
+  }
+
+  function currentTranslate() {
+    const match = sheet.style.transform.match(/-?\d+(\.\d+)?/);
+    return match ? parseFloat(match[0]) : 0;
   }
 
   function setSheetTranslate(px, animate) {
@@ -431,38 +454,56 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   handleArea.addEventListener("click", toggleSheet);
   menuBtn.addEventListener("click", toggleSheet);
 
-  function onDragStart(clientY) {
-    dragging = true;
+  function gestureStart(clientY, target) {
+    gestureIgnored = !!(target && target.closest && target.closest("#photo-list2, .leaflet-container"));
+    if (gestureIgnored) return;
+    gestureActive = true;
+    gestureMoved = false;
+    dragging = false;
     measureSheet();
-    const current = sheet.style.transform.match(/-?\d+(\.\d+)?/);
-    dragStartTranslate = current ? parseFloat(current[0]) : 0;
-    dragStartY = clientY;
-    sheet.classList.remove("animate");
+    gestureStartY = clientY;
+    gestureStartTranslate = currentTranslate();
+    // Always eligible when collapsed (drag from anywhere expands it); when expanded, only
+    // eligible if the list is already scrolled to the top.
+    gestureAllowed = !expanded || sheetScroll.scrollTop <= 0;
   }
-  function onDragMove(clientY) {
+
+  function gestureMove(clientY, evt) {
+    if (!gestureActive || gestureIgnored) return;
+    const deltaY = clientY - gestureStartY;
+    if (!gestureMoved) {
+      if (Math.abs(deltaY) < 6) return;
+      gestureMoved = true;
+      if (expanded && !(sheetScroll.scrollTop <= 0 && deltaY > 0)) gestureAllowed = false;
+      if (gestureAllowed) {
+        dragging = true;
+        sheet.classList.remove("animate");
+      }
+    }
     if (!dragging) return;
-    const delta = clientY - dragStartY;
-    let next = dragStartTranslate + delta;
+    if (evt && evt.cancelable) evt.preventDefault();
     const maxTranslate = Math.max(sheetHeightPx - collapsedOffsetPx, 0);
+    let next = gestureStartTranslate + deltaY;
     if (next < 0) next = 0;
     if (next > maxTranslate) next = maxTranslate;
     setSheetTranslate(next, false);
   }
-  function onDragEnd() {
+
+  function gestureEnd() {
+    gestureActive = false;
     if (!dragging) return;
     dragging = false;
-    const current = sheet.style.transform.match(/-?\d+(\.\d+)?/);
-    const val = current ? parseFloat(current[0]) : 0;
     const maxTranslate = Math.max(sheetHeightPx - collapsedOffsetPx, 0);
+    const val = currentTranslate();
     if (val < maxTranslate / 2) openSheet(); else collapseSheet();
   }
 
-  handleArea.addEventListener("pointerdown", (e) => onDragStart(e.clientY));
-  window.addEventListener("pointermove", (e) => onDragMove(e.clientY));
-  window.addEventListener("pointerup", onDragEnd);
-  handleArea.addEventListener("touchstart", (e) => onDragStart(e.touches[0].clientY), { passive: true });
-  handleArea.addEventListener("touchmove", (e) => onDragMove(e.touches[0].clientY), { passive: true });
-  handleArea.addEventListener("touchend", onDragEnd);
+  sheet.addEventListener("pointerdown", (e) => gestureStart(e.clientY, e.target));
+  window.addEventListener("pointermove", (e) => gestureMove(e.clientY, e));
+  window.addEventListener("pointerup", gestureEnd);
+  sheet.addEventListener("touchstart", (e) => gestureStart(e.touches[0].clientY, e.target), { passive: true });
+  sheet.addEventListener("touchmove", (e) => gestureMove(e.touches[0].clientY, e), { passive: false });
+  sheet.addEventListener("touchend", gestureEnd);
 
   // ---------- More menu ----------
   moreBtn.addEventListener("click", (e) => {
@@ -498,28 +539,90 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
     map.flyTo([lastLat, lastLng], Math.max(map.getZoom(), 16), { duration: 0.6 });
   });
 
-  // ---------- Overlay panel (sync log + photo grid) ----------
+  // ---------- Refresh ----------
+  function refreshData() {
+    refreshBtn.classList.add("spinning");
+    subscribeLocations();
+    subscribePhotos();
+    updateDeviceSub();
+    showToast("Refreshed");
+    setTimeout(() => refreshBtn.classList.remove("spinning"), 650);
+  }
+  refreshBtn.addEventListener("click", refreshData);
+
+  // ---------- Overlay panel (sync log / trajectory map + photo grid) ----------
   function openOverlay(title) {
     overlayTitle.textContent = title;
     overlayPanel.classList.add("visible");
   }
   function closeOverlay() {
     overlayPanel.classList.remove("visible");
+    if (syncMapInstance) {
+      syncMapInstance.remove();
+      syncMapInstance = null;
+    }
   }
   overlayClose.addEventListener("click", closeOverlay);
 
+  function directionsUrl(lat, lng) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+  }
+
   function showSyncLog() {
+    openOverlay("Trajectory");
+    overlayBody.innerHTML = `
+      <div id="sync-map"></div>
+      <div id="sync-point-detail" class="card" style="display:none;"></div>
+      <div class="empty-note" id="sync-empty" style="display:none;">No synced points yet.</div>
+    `;
+    const mapDiv = document.getElementById("sync-map");
+    const detailDiv = document.getElementById("sync-point-detail");
+    const emptyDiv = document.getElementById("sync-empty");
+
     if (recentSyncedPoints.length === 0) {
-      overlayBody.innerHTML = '<div class="empty-note">No synced points yet.</div>';
-    } else {
-      overlayBody.innerHTML = recentSyncedPoints.map((p) => `
-        <div class="sync-log-row">
-          <div class="slr-coords">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
-          <div class="slr-time">${p.time ? p.time.toLocaleTimeString() : "—"}</div>
-        </div>
-      `).join("");
+      mapDiv.style.display = "none";
+      emptyDiv.style.display = "block";
+      return;
     }
-    openOverlay("Synced points");
+
+    // recentSyncedPoints is most-recent-first; walk it oldest-to-newest for the path
+    const chronological = recentSyncedPoints.slice().reverse();
+    const latlngs = chronological.map((p) => [p.lat, p.lng]);
+
+    syncMapInstance = L.map(mapDiv, { zoomControl: false }).setView(latlngs[latlngs.length - 1], 15);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19
+    }).addTo(syncMapInstance);
+    const path = L.polyline(latlngs, { color: "#3478f6", weight: 3 }).addTo(syncMapInstance);
+    syncMapInstance.fitBounds(path.getBounds(), { padding: [28, 28], maxZoom: 17 });
+
+    function showPointDetail(p) {
+      detailDiv.style.display = "block";
+      detailDiv.innerHTML = `
+        <div class="mono" style="font-size:13px; margin-bottom:4px;">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
+        <div style="font-size:12px; color: var(--text-dim-light); margin-bottom:12px;">${p.time ? p.time.toLocaleString() : "—"}</div>
+        <button type="button" id="sync-point-directions">Get directions</button>
+      `;
+      detailDiv.querySelector("#sync-point-directions").addEventListener("click", () => {
+        window.open(directionsUrl(p.lat, p.lng), "_blank", "noopener");
+      });
+      detailDiv.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    chronological.forEach((p, idx) => {
+      const isLatest = idx === chronological.length - 1;
+      const marker = L.circleMarker([p.lat, p.lng], {
+        radius: isLatest ? 7 : 5,
+        color: isLatest ? "#3478f6" : "#8e8e93",
+        fillColor: isLatest ? "#3478f6" : "#c7c7cc",
+        fillOpacity: 1,
+        weight: 2
+      }).addTo(syncMapInstance);
+      marker.on("click", () => showPointDetail(p));
+    });
+
+    setTimeout(() => { if (syncMapInstance) syncMapInstance.invalidateSize(); }, 60);
   }
   syncCardEl.addEventListener("click", showSyncLog);
   syncCardEl.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showSyncLog(); } });
@@ -562,7 +665,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
         attribution: "&copy; OpenStreetMap contributors",
         maxZoom: 19
       }).addTo(map);
-      trailLine = L.polyline([], { color: "#3478f6", weight: 3 }).addTo(map);
     }
     startMyLocationWatch();
     subscribeLocations();
@@ -691,6 +793,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
     if (unsubLocations) unsubLocations();
     let query = db.collection("locations").orderBy("capturedAt", "asc").limitToLast(500);
     if (sessionFilter) query = query.where("sessionId", "==", sessionFilter);
+    let autoCentered = false;
     unsubLocations = query.onSnapshot((snap) => {
       const points = [];
       snap.forEach((doc) => {
@@ -707,18 +810,22 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
       }));
       if (points.length === 0) { resetDeviceCard(); return; }
 
-      const latlngs = points.map((p) => p.latlng);
-      trailLine.setLatLngs(latlngs);
       const latest = points[points.length - 1];
       if (currentMarker) map.removeLayer(currentMarker);
       const pinIcon = L.divIcon({
-        className: "",
+        className: "recover-marker",
         html: '<div class="recover-pin"><div class="badge"><div class="core"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"></rect></svg></div></div><div class="shadow-dot"></div></div>',
         iconSize: [40, 50],
         iconAnchor: [20, 46]
       });
       currentMarker = L.marker(latest.latlng, { icon: pinIcon }).addTo(map);
-      map.fitBounds(trailLine.getBounds(), { padding: [60, 60], maxZoom: 17 });
+      currentMarker.on("click", () => {
+        window.open(directionsUrl(latest.data.lat, latest.data.lng), "_blank", "noopener");
+      });
+      if (!autoCentered) {
+        map.setView(latest.latlng, Math.max(map.getZoom(), 16));
+        autoCentered = true;
+      }
 
       lastCapturedAt = latest.data.capturedAt?.toDate ? latest.data.capturedAt.toDate() : new Date();
       lastLat = latest.data.lat;
@@ -770,7 +877,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 
       directionsActionBtn.disabled = false;
       directionsActionBtn.onclick = () => {
-        window.open(`https://www.google.com/maps/dir/?api=1&destination=${latest.data.lat},${latest.data.lng}&travelmode=driving`, "_blank", "noopener");
+        window.open(directionsUrl(latest.data.lat, latest.data.lng), "_blank", "noopener");
       };
       recenterBtn.classList.add("has-target");
 
