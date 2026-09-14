@@ -144,6 +144,24 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 #lightbox .lb-close { position: absolute; top: calc(16px + env(safe-area-inset-top)); right: 16px; background: rgba(255,255,255,.15); border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer; }
 #lightbox .lb-cap { position: absolute; bottom: calc(24px + env(safe-area-inset-bottom)); color: #ddd; font-size: 13px; font-family: 'IBM Plex Mono', monospace; }
 
+/* full-screen overlay panel: sync log + photo grid */
+#overlay-panel { position: fixed; inset: 0; background: var(--sheet); z-index: 850; display: none; flex-direction: column; }
+#overlay-panel.visible { display: flex; }
+#overlay-header { display: flex; align-items: center; justify-content: space-between; padding: calc(16px + env(safe-area-inset-top)) 18px 14px; border-bottom: 1px solid rgba(255,255,255,.08); flex-shrink: 0; }
+#overlay-title { color: var(--text-light); font-size: 17px; font-weight: 600; }
+#overlay-close { background: var(--chip); border: none; color: var(--text-light); width: 34px; height: 34px; border-radius: 50%; font-size: 15px; cursor: pointer; }
+#overlay-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 18px calc(24px + env(safe-area-inset-bottom)); }
+
+.sync-log-row { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+.sync-log-row .slr-coords { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--text-light); }
+.sync-log-row .slr-time { font-size: 11px; color: var(--text-dim-light); white-space: nowrap; margin-left: 10px; }
+
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.photo-grid img { width: 100%; aspect-ratio: 1; border-radius: 10px; object-fit: cover; cursor: pointer; }
+.photo-grid .cap { font-size: 10px; color: var(--text-dim-light); margin-top: 3px; text-align: center; }
+
+.session-toggle { color: #4a9dff; font-size: 12px; text-align: center; padding: 10px 0 0; cursor: pointer; }
+
 /* small popover for "more" actions */
 #more-menu { position: absolute; z-index: 700; background: var(--sheet-raised); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.4); overflow: hidden; display: none; min-width: 190px; }
 #more-menu.visible { display: block; }
@@ -218,7 +236,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
         </div>
       </div>
 
-      <div class="card sync-row" id="sync-card">
+      <div class="card sync-row" id="sync-card" role="button" tabindex="0">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"></path><polyline points="9 16 12 19 15 12"></polyline></svg>
         <div>
           <div class="sync-text" id="sync-text">Notebook synced</div>
@@ -233,11 +251,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
         </button>
         <button class="action-item" id="copy-action">
           <div class="circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div>
-          <span>Copy</span>
-        </button>
-        <button class="action-item" id="stop-action">
-          <div class="circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
-          <span>Stop</span>
+          <span>Copy coordinates</span>
         </button>
       </div>
 
@@ -255,8 +269,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   </div>
 
   <div id="more-menu">
-    <button id="menu-copy">Copy coordinates</button>
-    <div class="divider"></div>
     <button id="menu-signout">Sign out</button>
   </div>
 </div>
@@ -265,6 +277,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   <button class="lb-close" type="button" aria-label="Close">&#10005;</button>
   <img id="lightbox-img" src="" alt="capture">
   <div class="lb-cap" id="lightbox-cap"></div>
+</div>
+
+<div id="overlay-panel">
+  <div id="overlay-header">
+    <div id="overlay-title">Title</div>
+    <button id="overlay-close" type="button" aria-label="Close">&#10005;</button>
+  </div>
+  <div id="overlay-body"></div>
 </div>
 
 <div id="toast"></div>
@@ -306,20 +326,23 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   const syncSubEl = document.getElementById("sync-sub");
   const directionsActionBtn = document.getElementById("directions-action");
   const copyActionBtn = document.getElementById("copy-action");
-  const stopActionBtn = document.getElementById("stop-action");
   const sessionListEl = document.getElementById("session-list");
   const photoListEl = document.getElementById("photo-list2");
   const seeAllLink = document.getElementById("see-all-photos");
 
   const moreBtn = document.getElementById("more-btn");
   const moreMenu = document.getElementById("more-menu");
-  const menuCopyBtn = document.getElementById("menu-copy");
   const menuSignoutBtn = document.getElementById("menu-signout");
 
   const lightbox = document.getElementById("lightbox");
   const lightboxImg = document.getElementById("lightbox-img");
   const lightboxCap = document.getElementById("lightbox-cap");
   const lightboxClose = lightbox.querySelector(".lb-close");
+
+  const overlayPanel = document.getElementById("overlay-panel");
+  const overlayTitle = document.getElementById("overlay-title");
+  const overlayBody = document.getElementById("overlay-body");
+  const overlayClose = document.getElementById("overlay-close");
 
   const toastEl = document.getElementById("toast");
 
@@ -334,6 +357,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   let relativeTimeInterval = null;
   let latestBearing = "";
   let latestDist = "";
+  let showAllSessions = false;
+  let recentSyncedPoints = []; // most-recent-first, for the Notebook log
+  let allPhotos = []; // cache of latest photo docs, for the "See all" grid
 
   // ---------- Auth ----------
   loginForm.addEventListener("submit", async (e) => {
@@ -453,7 +479,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   document.addEventListener("click", (e) => {
     if (!moreMenu.contains(e.target) && e.target !== moreBtn) moreMenu.classList.remove("visible");
   });
-  menuCopyBtn.addEventListener("click", () => { copyCoords(); moreMenu.classList.remove("visible"); });
   menuSignoutBtn.addEventListener("click", () => { auth.signOut(); moreMenu.classList.remove("visible"); });
 
   // ---------- Actions ----------
@@ -468,16 +493,53 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
   }
   copyActionBtn.addEventListener("click", copyCoords);
 
-  stopActionBtn.addEventListener("click", () => {
-    showToast("Stop tracking from the LostLinkTracker app (fingerprint required)");
-  });
-
   recenterBtn.addEventListener("click", () => {
     if (lastLat === null || lastLng === null || !map) return;
     map.flyTo([lastLat, lastLng], Math.max(map.getZoom(), 16), { duration: 0.6 });
   });
 
-  seeAllLink.addEventListener("click", (e) => { e.preventDefault(); openSheet(); sheetScroll.scrollTo({ top: sheetScroll.scrollHeight, behavior: "smooth" }); });
+  // ---------- Overlay panel (sync log + photo grid) ----------
+  function openOverlay(title) {
+    overlayTitle.textContent = title;
+    overlayPanel.classList.add("visible");
+  }
+  function closeOverlay() {
+    overlayPanel.classList.remove("visible");
+  }
+  overlayClose.addEventListener("click", closeOverlay);
+
+  function showSyncLog() {
+    if (recentSyncedPoints.length === 0) {
+      overlayBody.innerHTML = '<div class="empty-note">No synced points yet.</div>';
+    } else {
+      overlayBody.innerHTML = recentSyncedPoints.map((p) => `
+        <div class="sync-log-row">
+          <div class="slr-coords">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
+          <div class="slr-time">${p.time ? p.time.toLocaleTimeString() : "—"}</div>
+        </div>
+      `).join("");
+    }
+    openOverlay("Synced points");
+  }
+  syncCardEl.addEventListener("click", showSyncLog);
+  syncCardEl.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showSyncLog(); } });
+
+  function showAllPhotos() {
+    if (allPhotos.length === 0) {
+      overlayBody.innerHTML = '<div class="empty-note">No photos received yet.</div>';
+    } else {
+      overlayBody.innerHTML = '<div class="photo-grid"></div>';
+      const grid = overlayBody.querySelector(".photo-grid");
+      allPhotos.forEach((p) => {
+        const wrap = document.createElement("div");
+        wrap.innerHTML = `<img src="${p.dataUrl}" alt="capture"><div class="cap">${p.caption}</div>`;
+        wrap.querySelector("img").addEventListener("click", () => openLightbox(p.dataUrl, `${p.caption}${p.fullTime ? " · " + p.fullTime : ""}`));
+        grid.appendChild(wrap);
+      });
+    }
+    openOverlay("All photos");
+  }
+  seeAllLink.addEventListener("click", (e) => { e.preventDefault(); showAllPhotos(); });
 
   // ---------- Lightbox ----------
   function openLightbox(src, caption) {
@@ -561,12 +623,17 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 
   function renderSessions() {
     sessionListEl.innerHTML = "";
-    const rows = [{ id: "", label: "All sessions", icon: "globe", last: null }];
-    Array.from(knownSessions.entries())
-      .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-      .forEach(([sid, last]) => rows.push({ id: sid, label: sid, icon: sid.startsWith("native-") ? "phone" : "globe", last }));
+    const sorted = Array.from(knownSessions.entries()).sort((a, b) => (b[1] || 0) - (a[1] || 0));
+    const allRows = sorted.map(([sid, last]) => ({ id: sid, label: sid, icon: sid.startsWith("native-") ? "phone" : "globe", last }));
 
-    rows.forEach((row) => {
+    const visibleRows = [{ id: "", label: "All sessions", icon: "globe", last: null }];
+    if (showAllSessions) {
+      visibleRows.push(...allRows);
+    } else if (allRows.length > 0) {
+      visibleRows.push(allRows[0]); // most recent only
+    }
+
+    visibleRows.forEach((row) => {
       const el = document.createElement("div");
       el.className = "session-row" + (row.id === sessionFilter ? " active" : "");
       el.dataset.session = row.id;
@@ -588,6 +655,14 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
       });
       sessionListEl.appendChild(el);
     });
+
+    if (allRows.length > 1) {
+      const toggle = document.createElement("div");
+      toggle.className = "session-toggle";
+      toggle.textContent = showAllSessions ? "Show less" : "Show all sessions";
+      toggle.addEventListener("click", () => { showAllSessions = !showAllSessions; renderSessions(); });
+      sessionListEl.appendChild(toggle);
+    }
   }
 
   function resetDeviceCard() {
@@ -626,6 +701,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
         if (typeof d.lat === "number" && typeof d.lng === "number") points.push({ latlng: [d.lat, d.lng], data: d });
       });
       renderSessions();
+      recentSyncedPoints = points.slice(-30).reverse().map((p) => ({
+        lat: p.data.lat, lng: p.data.lng,
+        time: p.data.capturedAt?.toDate ? p.data.capturedAt.toDate() : null
+      }));
       if (points.length === 0) { resetDeviceCard(); return; }
 
       const latlngs = points.map((p) => p.latlng);
@@ -713,9 +792,10 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 
   function subscribePhotos() {
     if (unsubPhotos) unsubPhotos();
-    let query = db.collection("photos").orderBy("capturedAt", "desc").limit(20);
+    let query = db.collection("photos").orderBy("capturedAt", "desc").limit(60);
     if (sessionFilter) query = query.where("sessionId", "==", sessionFilter);
     unsubPhotos = query.onSnapshot((snap) => {
+      allPhotos = [];
       if (snap.empty) {
         photoListEl.innerHTML = '<div class="empty-note">No photos received yet.</div>';
         return;
@@ -727,6 +807,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
         const ageText = capturedAt ? formatRelativeTime(Date.now() - capturedAt.getTime()) : "pending";
         const facing = d.facing === "front" ? "Front" : d.facing === "back" ? "Back" : "Photo";
         const caption = `${facing} · ${ageText}`;
+        allPhotos.push({ dataUrl: d.dataUrl, caption, fullTime: capturedAt ? capturedAt.toLocaleString() : "" });
         const wrap = document.createElement("div");
         wrap.className = "photo-thumb";
         wrap.innerHTML = `<img src="${d.dataUrl}" alt="capture"><div class="cap">${caption}</div>`;
