@@ -2,244 +2,163 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Recover — Console</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #0E1512;
-    --panel: #131C18;
-    --line: #24322C;
-    --text: #EDE7DA;
-    --text-dim: #8A968E;
-    --signal: #E8A33D;
-    --signal-dim: #6B4F26;
-    --ok: #6FCF97;
-    --danger: #E0654B;
-  }
+:root {
+  --bg: #eef6f4;
+  --accent: #0f6e56;
+  --danger: #c0432c;
+  --map-bg: #e4e2dc;
+  --pin: #3478f6;
+  --sheet: #1c1c1e;
+  --sheet-raised: #2c2c2e;
+  --chip: #3a3a3c;
+  --handle: #48484a;
+  --text-light: #ffffff;
+  --text-dim-light: #8e8e93;
+  --green: #34c759;
+  --amber: #d9a441;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; font-family: 'Inter', sans-serif; overflow: hidden; }
+.mono { font-family: 'IBM Plex Mono', monospace; }
 
-  * { box-sizing: border-box; }
+/* ---------- Gate (unchanged) ---------- */
+#gate { height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 28px; background: var(--bg); }
+#gate .mark { font-size: 15px; letter-spacing: 0.14em; color: var(--accent); }
+#gate .mark::before { content: "\25CF"; margin-right: 8px; font-size: 9px; vertical-align: middle; }
+#gate form { width: 300px; display: flex; flex-direction: column; gap: 14px; }
+#gate input { background: #ffffff; border: 1px solid rgba(15,110,86,.14); border-radius: 8px; color: #0b2620; font-family: 'IBM Plex Mono', monospace; font-size: 14px; padding: 10px 12px; outline: none; }
+#gate input:focus { border-color: var(--accent); }
+#gate button { margin-top: 8px; background: var(--accent); color: #ffffff; border: none; padding: 12px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; border-radius: 10px; }
+#gate button:hover { background: #0c5c48; }
+#gate-error { color: var(--danger); font-size: 13px; font-family: 'IBM Plex Mono', monospace; min-height: 16px; }
 
-  html, body {
-    margin: 0;
-    height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Space Grotesk', sans-serif;
-  }
+/* ---------- Console shell ---------- */
+#console { display: none; height: 100%; position: relative; overflow: hidden; }
+#console.active { display: block; }
+#map { position: absolute; inset: 0; background: var(--map-bg); }
 
-  .mono { font-family: 'IBM Plex Mono', monospace; }
+/* custom marker */
+.recover-pin { display: flex; flex-direction: column; align-items: center; }
+.recover-pin .badge {
+  width: 40px; height: 40px; border-radius: 50%; background: var(--pin);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 10px rgba(52,120,246,.45);
+}
+.recover-pin .badge .core {
+  width: 24px; height: 24px; border-radius: 50%; background: #0b2c66;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+}
+.recover-pin .shadow-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(0,0,0,.28); margin-top: 2px; }
 
-  /* ---------- Login gate ---------- */
-  #gate {
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 28px;
-  }
+/* floating map buttons */
+.map-fab {
+  position: absolute; z-index: 500; width: 46px; height: 46px; border-radius: 50%;
+  background: #ffffff; border: none; box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  display: flex; align-items: center; justify-content: center; color: #0b2620; cursor: pointer;
+}
+.map-fab:active { background: #eee; }
+#menu-btn { top: calc(16px + env(safe-area-inset-top)); left: 16px; }
+#recenter-btn { top: calc(16px + env(safe-area-inset-top)); right: 16px; display: none; }
+#recenter-btn.has-target { display: flex; }
 
-  #gate .mark {
-    font-size: 15px;
-    letter-spacing: 0.14em;
-    color: var(--signal);
-  }
+/* ---------- Bottom sheet ---------- */
+#sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0); z-index: 550; pointer-events: none; transition: background .25s ease; }
+#sheet-backdrop.visible { background: rgba(0,0,0,.32); pointer-events: auto; }
 
-  #gate .mark::before {
-    content: "●";
-    margin-right: 8px;
-    font-size: 9px;
-    vertical-align: middle;
-  }
+#sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 600;
+  height: 86vh; max-height: 86vh;
+  background: var(--sheet); color: var(--text-light);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 30px rgba(0,0,0,.35);
+  display: flex; flex-direction: column;
+  transform: translateY(calc(100% - 148px));
+  touch-action: none;
+}
+#sheet.animate { transition: transform .28s cubic-bezier(.2,.8,.2,1); }
 
-  #gate form {
-    width: 300px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
+#sheet-handle-area { flex-shrink: 0; padding: 10px 0 6px; display: flex; justify-content: center; cursor: grab; }
+#sheet-handle-area .bar { width: 40px; height: 5px; border-radius: 3px; background: var(--handle); }
 
-  #gate input {
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--line);
-    color: var(--text);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 14px;
-    padding: 10px 2px;
-    outline: none;
-  }
+#sheet-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 18px calc(24px + env(safe-area-inset-bottom)); touch-action: pan-y; }
 
-  #gate input:focus { border-bottom-color: var(--signal); }
+.sheet-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 16px; }
+.sheet-header .title { font-size: 20px; font-weight: 600; }
+.icon-btn-flat { background: none; border: none; color: var(--text-dim-light); font-size: 20px; cursor: pointer; padding: 6px; line-height: 1; }
 
-  #gate button {
-    margin-top: 8px;
-    background: var(--signal);
-    color: #1A1006;
-    border: none;
-    padding: 12px;
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    font-size: 14px;
-    cursor: pointer;
-  }
+.card { background: var(--sheet-raised); border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; }
 
-  #gate button:hover { background: #f0b25b; }
+.device-row { display: flex; align-items: center; gap: 10px; }
+.device-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--chip); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.device-name { font-weight: 600; font-size: 15px; flex: 1; }
+.device-battery { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--green); }
+.device-battery.low { color: var(--amber); }
+.device-sub { margin-top: 6px; font-size: 12px; color: var(--text-dim-light); padding-left: 44px; }
 
-  #gate-error {
-    color: var(--danger);
-    font-size: 13px;
-    font-family: 'IBM Plex Mono', monospace;
-    min-height: 16px;
-  }
+.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim-light); margin: 0 2px 10px; display: flex; justify-content: space-between; align-items: baseline; }
+.section-label a { color: #4a9dff; text-decoration: none; text-transform: none; letter-spacing: 0; font-size: 13px; }
 
-  /* ---------- Console layout ---------- */
-  #console { display: none; height: 100%; }
-  #console.active { display: grid; grid-template-columns: 1fr 340px; }
+.conn-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.conn-chip2 { background: var(--chip); border-radius: 12px; padding: 10px 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 12px; min-height: 56px; }
+.conn-chip2 svg { color: var(--green); }
+.conn-chip2.off svg { color: var(--text-dim-light); }
+.conn-chip2 span { color: var(--text-light); line-height: 1.2; }
+.conn-chip2.off span { color: var(--text-dim-light); }
 
-  #map { height: 100%; background: #0A0F0C; }
+.sync-row { display: flex; align-items: center; gap: 10px; }
+.sync-row svg { flex-shrink: 0; color: var(--green); }
+.sync-row.pending svg { color: var(--amber); }
+.sync-row .sync-text { font-size: 13px; font-weight: 500; }
+.sync-row .sync-sub { font-size: 11px; color: var(--text-dim-light); margin-top: 2px; }
 
-  #sidebar {
-    background: var(--panel);
-    border-left: 1px solid var(--line);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+.action-row { display: flex; justify-content: space-around; margin-bottom: 22px; }
+.action-item { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: none; color: var(--text-light); cursor: pointer; }
+.action-item .circle { width: 52px; height: 52px; border-radius: 50%; background: var(--chip); display: flex; align-items: center; justify-content: center; }
+.action-item span { font-size: 11px; color: var(--text-dim-light); }
+.action-item:disabled { opacity: .45; cursor: default; }
 
-  #sidebar header {
-    padding: 18px 20px 16px;
-    border-bottom: 1px solid var(--line);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
+.session-row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid rgba(255,255,255,.06); cursor: pointer; }
+.session-row:last-child { border-bottom: none; }
+.session-row.active .session-name { color: #4a9dff; }
+.session-icon-wrap { position: relative; width: 36px; height: 36px; border-radius: 50%; background: var(--chip); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.session-icon-wrap .dot { position: absolute; bottom: -1px; right: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); border: 2px solid var(--sheet); }
+.session-name { font-size: 13px; flex: 1; }
+.session-time { font-size: 12px; color: var(--text-dim-light); }
 
-  #sidebar header .title {
-    font-weight: 600;
-    font-size: 15px;
-  }
+#photo-list2 { display: flex; gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.photo-thumb { flex: 0 0 96px; }
+.photo-thumb img { width: 96px; height: 96px; border-radius: 12px; object-fit: cover; display: block; cursor: pointer; }
+.photo-thumb .cap { font-size: 10px; color: var(--text-dim-light); margin-top: 4px; text-align: center; }
+.empty-note { color: var(--text-dim-light); font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
 
-  #sidebar header .title .mark {
-    color: var(--signal);
-    font-size: 9px;
-    margin-right: 6px;
-  }
+/* lightbox */
+#lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 900; display: none; align-items: center; justify-content: center; }
+#lightbox.visible { display: flex; }
+#lightbox img { max-width: 92vw; max-height: 82vh; border-radius: 8px; }
+#lightbox .lb-close { position: absolute; top: calc(16px + env(safe-area-inset-top)); right: 16px; background: rgba(255,255,255,.15); border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; font-size: 18px; cursor: pointer; }
+#lightbox .lb-cap { position: absolute; bottom: calc(24px + env(safe-area-inset-bottom)); color: #ddd; font-size: 13px; font-family: 'IBM Plex Mono', monospace; }
 
-  #logout {
-    background: none;
-    border: 1px solid var(--line);
-    color: var(--text-dim);
-    font-size: 12px;
-    padding: 6px 10px;
-    cursor: pointer;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-  #logout:hover { color: var(--text); border-color: var(--text-dim); }
+/* small popover for "more" actions */
+#more-menu { position: absolute; z-index: 700; background: var(--sheet-raised); border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.4); overflow: hidden; display: none; min-width: 190px; }
+#more-menu.visible { display: block; }
+#more-menu button { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; color: var(--text-light); padding: 12px 16px; font-size: 13px; text-align: left; cursor: pointer; font-family: 'Inter', sans-serif; }
+#more-menu button:hover { background: rgba(255,255,255,.06); }
+#more-menu .divider { height: 1px; background: rgba(255,255,255,.08); }
+#toast { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); background: #2c2c2e; color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 13px; z-index: 950; opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+#toast.visible { opacity: 1; }
 
-  #status-block {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  #status-block .label {
-    color: var(--text-dim);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 6px;
-  }
-
-  #status-block .value {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 15px;
-  }
-
-  #status-block .value.live { color: var(--ok); }
-  #status-block .value.stale { color: var(--text-dim); }
-
-  #status-block .coords {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
-
-  #my-distance {
-    margin-top: 6px;
-    color: var(--ok);
-  }
-
-  #directions-btn {
-    display: none;
-    margin-top: 10px;
-    background: var(--signal);
-    color: #1A1006;
-    text-align: center;
-    text-decoration: none;
-    padding: 9px;
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    font-size: 13px;
-    border-radius: 3px;
-  }
-  #directions-btn:hover { background: #f0b25b; }
-
-  #session-select {
-    width: 100%;
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--line);
-    padding: 8px;
-    margin-top: 10px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
-  }
-
-  #photo-feed {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px 20px;
-  }
-
-  #photo-feed .label {
-    color: var(--text-dim);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 12px;
-  }
-
-  .photo-card {
-    margin-bottom: 16px;
-  }
-
-  .photo-card img {
-    width: 100%;
-    display: block;
-    border: 1px solid var(--line);
-  }
-
-  .photo-card .ts {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-top: 6px;
-  }
-
-  .empty-note {
-    color: var(--text-dim);
-    font-size: 12px;
-    font-family: 'IBM Plex Mono', monospace;
-  }
+@media (max-width: 768px) {
+  #gate form { width: 90%; max-width: 320px; }
+}
 </style>
 </head>
 <body>
-
-<!-- Login gate -->
 <div id="gate">
   <div class="mark">RECOVER — SIGN IN</div>
   <form id="login-form">
@@ -250,43 +169,114 @@
   <div id="gate-error" class="mono"></div>
 </div>
 
-<!-- Main console -->
 <div id="console">
   <div id="map"></div>
-  <div id="sidebar">
-    <header>
-      <div class="title"><span class="mark">●</span>Recover console</div>
-      <button id="logout">Sign out</button>
-    </header>
 
-    <div id="status-block">
-      <div class="label">Last report</div>
-      <div class="value stale mono" id="last-seen">No data yet</div>
-      <div class="coords" id="last-coords"></div>
-      <div class="coords mono" id="my-distance"></div>
-      <a id="directions-btn" href="#" target="_blank" rel="noopener">Get Directions →</a>
-      <select id="session-select">
-        <option value="">All sessions</option>
-      </select>
-    </div>
+  <button id="menu-btn" class="map-fab" type="button" aria-label="Toggle panel">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+  </button>
+  <button id="recenter-btn" class="map-fab" type="button" aria-label="Recenter map">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>
+  </button>
 
-    <div id="photo-feed">
-      <div class="label">Captured photos</div>
-      <div id="photo-list"><div class="empty-note">No photos received yet.</div></div>
+  <div id="sheet-backdrop"></div>
+
+  <div id="sheet">
+    <div id="sheet-handle-area"><div class="bar"></div></div>
+    <div id="sheet-scroll">
+      <div class="sheet-header">
+        <div class="title">LostLink</div>
+        <button id="more-btn" class="icon-btn-flat" type="button" aria-label="More options">&#8942;</button>
+      </div>
+
+      <div class="card">
+        <div class="device-row">
+          <div class="device-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"></rect><line x1="11" y1="18" x2="13" y2="18"></line></svg>
+          </div>
+          <div class="device-name">Nikhil's S23</div>
+          <div class="device-battery" id="battery-value">—</div>
+        </div>
+        <div class="device-sub" id="device-sub">No data yet</div>
+      </div>
+
+      <div class="card">
+        <div class="section-label"><span>Connectivity</span></div>
+        <div class="conn-grid3">
+          <div class="conn-chip2 off" id="wifi-chip">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+            <span id="wifi-text">WiFi off</span>
+          </div>
+          <div class="conn-chip2 off" id="data-chip">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4"></path></svg>
+            <span id="data-text">Data off</span>
+          </div>
+          <div class="conn-chip2 off" id="sim-chip">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"></rect><path d="M9 2v6h6V2"></path></svg>
+            <span id="sim-text">SIM unknown</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card sync-row" id="sync-card">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"></path><polyline points="9 16 12 19 15 12"></polyline></svg>
+        <div>
+          <div class="sync-text" id="sync-text">Notebook synced</div>
+          <div class="sync-sub" id="sync-sub">—</div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="action-item" id="directions-action" disabled>
+          <div class="circle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg></div>
+          <span>Directions</span>
+        </button>
+        <button class="action-item" id="copy-action">
+          <div class="circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div>
+          <span>Copy</span>
+        </button>
+        <button class="action-item" id="stop-action">
+          <div class="circle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
+          <span>Stop</span>
+        </button>
+      </div>
+
+      <div class="section-label"><span>Sessions</span></div>
+      <div class="card" id="session-list" style="padding: 4px 12px;">
+        <div class="session-row active" data-session="">
+          <div class="session-icon-wrap"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle></svg></div>
+          <div class="session-name">All sessions</div>
+        </div>
+      </div>
+
+      <div class="section-label"><span>Photos</span> <a href="#" id="see-all-photos">See all</a></div>
+      <div id="photo-list2"><div class="empty-note">No photos received yet.</div></div>
     </div>
   </div>
+
+  <div id="more-menu">
+    <button id="menu-copy">Copy coordinates</button>
+    <div class="divider"></div>
+    <button id="menu-signout">Sign out</button>
+  </div>
 </div>
+
+<div id="lightbox">
+  <button class="lb-close" type="button" aria-label="Close">&#10005;</button>
+  <img id="lightbox-img" src="" alt="capture">
+  <div class="lb-cap" id="lightbox-cap"></div>
+</div>
+
+<div id="toast"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="../firebase-config.js"></script>
-
 <script>
 (function () {
   "use strict";
-
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
   const db = firebase.firestore();
@@ -295,20 +285,57 @@
   const consoleEl = document.getElementById("console");
   const loginForm = document.getElementById("login-form");
   const gateError = document.getElementById("gate-error");
-  const logoutBtn = document.getElementById("logout");
-  const sessionSelect = document.getElementById("session-select");
-  const lastSeenEl = document.getElementById("last-seen");
-  const lastCoordsEl = document.getElementById("last-coords");
-  const photoListEl = document.getElementById("photo-list");
-  const directionsBtn = document.getElementById("directions-btn");
-  const myDistanceEl = document.getElementById("my-distance");
+
+  const sheet = document.getElementById("sheet");
+  const sheetScroll = document.getElementById("sheet-scroll");
+  const handleArea = document.getElementById("sheet-handle-area");
+  const backdrop = document.getElementById("sheet-backdrop");
+  const menuBtn = document.getElementById("menu-btn");
+  const recenterBtn = document.getElementById("recenter-btn");
+
+  const batteryValueEl = document.getElementById("battery-value");
+  const deviceSubEl = document.getElementById("device-sub");
+  const wifiChipEl = document.getElementById("wifi-chip");
+  const wifiTextEl = document.getElementById("wifi-text");
+  const dataChipEl = document.getElementById("data-chip");
+  const dataTextEl = document.getElementById("data-text");
+  const simChipEl = document.getElementById("sim-chip");
+  const simTextEl = document.getElementById("sim-text");
+  const syncCardEl = document.getElementById("sync-card");
+  const syncTextEl = document.getElementById("sync-text");
+  const syncSubEl = document.getElementById("sync-sub");
+  const directionsActionBtn = document.getElementById("directions-action");
+  const copyActionBtn = document.getElementById("copy-action");
+  const stopActionBtn = document.getElementById("stop-action");
+  const sessionListEl = document.getElementById("session-list");
+  const photoListEl = document.getElementById("photo-list2");
+  const seeAllLink = document.getElementById("see-all-photos");
+
+  const moreBtn = document.getElementById("more-btn");
+  const moreMenu = document.getElementById("more-menu");
+  const menuCopyBtn = document.getElementById("menu-copy");
+  const menuSignoutBtn = document.getElementById("menu-signout");
+
+  const lightbox = document.getElementById("lightbox");
+  const lightboxImg = document.getElementById("lightbox-img");
+  const lightboxCap = document.getElementById("lightbox-cap");
+  const lightboxClose = lightbox.querySelector(".lb-close");
+
+  const toastEl = document.getElementById("toast");
 
   let map, trailLine, currentMarker;
   let unsubLocations = null;
   let unsubPhotos = null;
-  const knownSessions = new Set();
+  const knownSessions = new Map(); // sessionId -> last capturedAt
   let myLat = null, myLng = null;
+  let lastCapturedAt = null;
+  let lastLat = null, lastLng = null;
+  let sessionFilter = "";
+  let relativeTimeInterval = null;
+  let latestBearing = "";
+  let latestDist = "";
 
+  // ---------- Auth ----------
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     gateError.textContent = "";
@@ -320,8 +347,6 @@
       gateError.textContent = err.message;
     }
   });
-
-  logoutBtn.addEventListener("click", () => auth.signOut());
 
   auth.onAuthStateChanged((user) => {
     if (user && !user.isAnonymous) {
@@ -335,32 +360,165 @@
     }
   });
 
+  // ---------- Toast ----------
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("visible");
+    setTimeout(() => toastEl.classList.remove("visible"), 1600);
+  }
+
+  // ---------- Bottom sheet drag ----------
+  let sheetHeightPx = 0;
+  let collapsedOffsetPx = 148; // px of sheet visible when collapsed (handle + header + device card peek)
+  let expanded = false;
+  let dragStartY = 0;
+  let dragStartTranslate = 0;
+  let dragging = false;
+
+  function measureSheet() {
+    sheetHeightPx = sheet.getBoundingClientRect().height;
+  }
+
+  function setSheetTranslate(px, animate) {
+    if (animate) sheet.classList.add("animate"); else sheet.classList.remove("animate");
+    sheet.style.transform = `translateY(${px}px)`;
+  }
+
+  function openSheet(animate = true) {
+    measureSheet();
+    setSheetTranslate(0, animate);
+    backdrop.classList.remove("visible");
+    expanded = true;
+  }
+
+  function collapseSheet(animate = true) {
+    measureSheet();
+    setSheetTranslate(Math.max(sheetHeightPx - collapsedOffsetPx, 0), animate);
+    backdrop.classList.remove("visible");
+    expanded = false;
+  }
+
+  function toggleSheet() {
+    if (expanded) collapseSheet(); else openSheet();
+  }
+
+  handleArea.addEventListener("click", toggleSheet);
+  menuBtn.addEventListener("click", toggleSheet);
+
+  function onDragStart(clientY) {
+    dragging = true;
+    measureSheet();
+    const current = sheet.style.transform.match(/-?\d+(\.\d+)?/);
+    dragStartTranslate = current ? parseFloat(current[0]) : 0;
+    dragStartY = clientY;
+    sheet.classList.remove("animate");
+  }
+  function onDragMove(clientY) {
+    if (!dragging) return;
+    const delta = clientY - dragStartY;
+    let next = dragStartTranslate + delta;
+    const maxTranslate = Math.max(sheetHeightPx - collapsedOffsetPx, 0);
+    if (next < 0) next = 0;
+    if (next > maxTranslate) next = maxTranslate;
+    setSheetTranslate(next, false);
+  }
+  function onDragEnd() {
+    if (!dragging) return;
+    dragging = false;
+    const current = sheet.style.transform.match(/-?\d+(\.\d+)?/);
+    const val = current ? parseFloat(current[0]) : 0;
+    const maxTranslate = Math.max(sheetHeightPx - collapsedOffsetPx, 0);
+    if (val < maxTranslate / 2) openSheet(); else collapseSheet();
+  }
+
+  handleArea.addEventListener("pointerdown", (e) => onDragStart(e.clientY));
+  window.addEventListener("pointermove", (e) => onDragMove(e.clientY));
+  window.addEventListener("pointerup", onDragEnd);
+  handleArea.addEventListener("touchstart", (e) => onDragStart(e.touches[0].clientY), { passive: true });
+  handleArea.addEventListener("touchmove", (e) => onDragMove(e.touches[0].clientY), { passive: true });
+  handleArea.addEventListener("touchend", onDragEnd);
+
+  // ---------- More menu ----------
+  moreBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (moreMenu.classList.contains("visible")) {
+      moreMenu.classList.remove("visible");
+      return;
+    }
+    const rect = moreBtn.getBoundingClientRect();
+    moreMenu.style.top = `${rect.bottom + 6}px`;
+    moreMenu.style.right = `${window.innerWidth - rect.right}px`;
+    moreMenu.classList.add("visible");
+  });
+  document.addEventListener("click", (e) => {
+    if (!moreMenu.contains(e.target) && e.target !== moreBtn) moreMenu.classList.remove("visible");
+  });
+  menuCopyBtn.addEventListener("click", () => { copyCoords(); moreMenu.classList.remove("visible"); });
+  menuSignoutBtn.addEventListener("click", () => { auth.signOut(); moreMenu.classList.remove("visible"); });
+
+  // ---------- Actions ----------
+  async function copyCoords() {
+    if (lastLat === null || lastLng === null) { showToast("No location yet"); return; }
+    try {
+      await navigator.clipboard.writeText(`${lastLat}, ${lastLng}`);
+      showToast("Coordinates copied");
+    } catch (err) {
+      showToast("Couldn't copy");
+    }
+  }
+  copyActionBtn.addEventListener("click", copyCoords);
+
+  stopActionBtn.addEventListener("click", () => {
+    showToast("Stop tracking from the LostLinkTracker app (fingerprint required)");
+  });
+
+  recenterBtn.addEventListener("click", () => {
+    if (lastLat === null || lastLng === null || !map) return;
+    map.flyTo([lastLat, lastLng], Math.max(map.getZoom(), 16), { duration: 0.6 });
+  });
+
+  seeAllLink.addEventListener("click", (e) => { e.preventDefault(); openSheet(); sheetScroll.scrollTo({ top: sheetScroll.scrollHeight, behavior: "smooth" }); });
+
+  // ---------- Lightbox ----------
+  function openLightbox(src, caption) {
+    lightboxImg.src = src;
+    lightboxCap.textContent = caption || "";
+    lightbox.classList.add("visible");
+  }
+  function closeLightbox() {
+    lightbox.classList.remove("visible");
+    lightboxImg.src = "";
+  }
+  lightboxClose.addEventListener("click", closeLightbox);
+  lightbox.addEventListener("click", (e) => { if (e.target === lightbox) closeLightbox(); });
+
+  // ---------- Console lifecycle ----------
   function initConsole() {
     if (!map) {
-      map = L.map("map", { zoomControl: true }).setView([20, 0], 3);
+      map = L.map("map", { zoomControl: false }).setView([20, 0], 3);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
         maxZoom: 19
       }).addTo(map);
-      trailLine = L.polyline([], { color: "#E8A33D", weight: 3 }).addTo(map);
+      trailLine = L.polyline([], { color: "#3478f6", weight: 3 }).addTo(map);
     }
     startMyLocationWatch();
     subscribeLocations();
     subscribePhotos();
+    if (!relativeTimeInterval) relativeTimeInterval = setInterval(updateDeviceSub, 15000);
+    requestAnimationFrame(() => collapseSheet(false));
   }
 
   function teardownConsole() {
     if (unsubLocations) unsubLocations();
     if (unsubPhotos) unsubPhotos();
+    if (relativeTimeInterval) { clearInterval(relativeTimeInterval); relativeTimeInterval = null; }
   }
 
   function startMyLocationWatch() {
     if (!navigator.geolocation) return;
     navigator.geolocation.watchPosition(
-      (pos) => {
-        myLat = pos.coords.latitude;
-        myLng = pos.coords.longitude;
-      },
+      (pos) => { myLat = pos.coords.latitude; myLng = pos.coords.longitude; },
       (err) => console.warn("Own location unavailable:", err.message),
       { enableHighAccuracy: true, maximumAge: 10000 }
     );
@@ -371,98 +529,192 @@
     const toRad = (d) => (d * Math.PI) / 180;
     const dLat = toRad(lat2 - lat1);
     const dLng = toRad(lng2 - lng1);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
-
   function bearingCompass(lat1, lng1, lat2, lng2) {
     const toRad = (d) => (d * Math.PI) / 180;
     const y = Math.sin(toRad(lng2 - lng1)) * Math.cos(toRad(lat2));
-    const x =
-      Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
-      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
+    const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(toRad(lng2 - lng1));
     const deg = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
     const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     return dirs[Math.round(deg / 45) % 8];
   }
+  function formatRelativeTime(ageMs) {
+    const seconds = Math.floor(ageMs / 1000);
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  function updateDeviceSub() {
+    if (!lastCapturedAt) { deviceSubEl.textContent = "No data yet"; return; }
+    const ageMs = Date.now() - lastCapturedAt.getTime();
+    const timeText = formatRelativeTime(ageMs);
+    const distPart = latestDist ? `${latestDist} ${latestBearing}` : null;
+    deviceSubEl.textContent = distPart ? `${distPart} · ${timeText}` : timeText;
+  }
+
+  function renderSessions() {
+    sessionListEl.innerHTML = "";
+    const rows = [{ id: "", label: "All sessions", icon: "globe", last: null }];
+    Array.from(knownSessions.entries())
+      .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+      .forEach(([sid, last]) => rows.push({ id: sid, label: sid, icon: sid.startsWith("native-") ? "phone" : "globe", last }));
+
+    rows.forEach((row) => {
+      const el = document.createElement("div");
+      el.className = "session-row" + (row.id === sessionFilter ? " active" : "");
+      el.dataset.session = row.id;
+      const iconSvg = row.icon === "phone"
+        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"></rect></svg>'
+        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="3" y1="12" x2="21" y2="12"></line></svg>';
+      const dotHtml = row.icon === "phone" ? '<span class="dot"></span>' : "";
+      const timeText = row.last ? formatRelativeTime(Date.now() - row.last.getTime()) : "";
+      el.innerHTML = `
+        <div class="session-icon-wrap">${iconSvg}${dotHtml}</div>
+        <div class="session-name">${row.label}</div>
+        <div class="session-time">${timeText}</div>
+      `;
+      el.addEventListener("click", () => {
+        sessionFilter = row.id;
+        subscribeLocations();
+        subscribePhotos();
+        renderSessions();
+      });
+      sessionListEl.appendChild(el);
+    });
+  }
+
+  function resetDeviceCard() {
+    batteryValueEl.textContent = "—";
+    batteryValueEl.className = "device-battery";
+    deviceSubEl.textContent = "No data yet";
+    wifiChipEl.className = "conn-chip2 off";
+    wifiTextEl.textContent = "WiFi off";
+    dataChipEl.className = "conn-chip2 off";
+    dataTextEl.textContent = "Data off";
+    simChipEl.className = "conn-chip2 off";
+    simTextEl.textContent = "SIM unknown";
+    syncCardEl.className = "sync-row card";
+    syncTextEl.textContent = "Notebook: —";
+    syncSubEl.textContent = "—";
+    directionsActionBtn.disabled = true;
+    recenterBtn.classList.remove("has-target");
+    lastCapturedAt = null;
+    lastLat = null;
+    lastLng = null;
+    latestDist = "";
+    latestBearing = "";
+  }
 
   function subscribeLocations() {
-    const sessionFilter = sessionSelect.value;
     if (unsubLocations) unsubLocations();
-
     let query = db.collection("locations").orderBy("capturedAt", "asc").limitToLast(500);
     if (sessionFilter) query = query.where("sessionId", "==", sessionFilter);
-
     unsubLocations = query.onSnapshot((snap) => {
       const points = [];
       snap.forEach((doc) => {
         const d = doc.data();
-        knownSessions.add(d.sessionId);
-        if (typeof d.lat === "number" && typeof d.lng === "number") {
-          points.push({ latlng: [d.lat, d.lng], data: d });
-        }
+        const ts = d.capturedAt?.toDate ? d.capturedAt.toDate() : null;
+        const prevLast = knownSessions.get(d.sessionId);
+        if (!prevLast || (ts && ts > prevLast)) knownSessions.set(d.sessionId, ts || prevLast || new Date());
+        if (typeof d.lat === "number" && typeof d.lng === "number") points.push({ latlng: [d.lat, d.lng], data: d });
       });
-
-      refreshSessionOptions();
-
-      if (points.length === 0) {
-        lastSeenEl.textContent = "No data yet";
-        lastSeenEl.className = "value stale mono";
-        lastCoordsEl.textContent = "";
-        myDistanceEl.textContent = "";
-        directionsBtn.style.display = "none";
-        return;
-      }
+      renderSessions();
+      if (points.length === 0) { resetDeviceCard(); return; }
 
       const latlngs = points.map((p) => p.latlng);
       trailLine.setLatLngs(latlngs);
-
       const latest = points[points.length - 1];
       if (currentMarker) map.removeLayer(currentMarker);
-      currentMarker = L.circleMarker(latest.latlng, {
-        radius: 8,
-        color: "#E8A33D",
-        fillColor: "#E8A33D",
-        fillOpacity: 0.9
-      }).addTo(map);
+      const pinIcon = L.divIcon({
+        className: "",
+        html: '<div class="recover-pin"><div class="badge"><div class="core"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"></rect></svg></div></div><div class="shadow-dot"></div></div>',
+        iconSize: [40, 50],
+        iconAnchor: [20, 46]
+      });
+      currentMarker = L.marker(latest.latlng, { icon: pinIcon }).addTo(map);
+      map.fitBounds(trailLine.getBounds(), { padding: [60, 60], maxZoom: 17 });
 
-      map.fitBounds(trailLine.getBounds(), { padding: [40, 40], maxZoom: 17 });
+      lastCapturedAt = latest.data.capturedAt?.toDate ? latest.data.capturedAt.toDate() : new Date();
+      lastLat = latest.data.lat;
+      lastLng = latest.data.lng;
 
-      const capturedAt = latest.data.capturedAt?.toDate ? latest.data.capturedAt.toDate() : new Date();
-      const ageMs = Date.now() - capturedAt.getTime();
-      lastSeenEl.textContent = capturedAt.toLocaleString();
-      lastSeenEl.className = ageMs < 2 * 60 * 1000 ? "value live mono" : "value stale mono";
-      lastCoordsEl.textContent =
-        `${latest.data.lat.toFixed(6)}, ${latest.data.lng.toFixed(6)}` +
-        (latest.data.accuracy ? `  ±${Math.round(latest.data.accuracy)}m` : "");
+      const battery = latest.data.batteryPct;
+      if (typeof battery === "number" && battery >= 0) {
+        batteryValueEl.textContent = `${battery}%`;
+        batteryValueEl.className = battery <= 20 ? "device-battery low" : "device-battery";
+      } else {
+        batteryValueEl.textContent = "—";
+      }
 
-      // Directions button -> hands off full turn-by-turn nav to Google Maps
-      directionsBtn.href = `https://www.google.com/maps/dir/?api=1&destination=${latest.data.lat},${latest.data.lng}&travelmode=driving`;
-      directionsBtn.style.display = "block";
+      if (latest.data.wifiConnected) {
+        wifiChipEl.className = "conn-chip2";
+        wifiTextEl.textContent = latest.data.wifiSsid || "WiFi on";
+      } else {
+        wifiChipEl.className = "conn-chip2 off";
+        wifiTextEl.textContent = "WiFi off";
+      }
+      if (latest.data.mobileDataConnected) {
+        dataChipEl.className = "conn-chip2";
+        dataTextEl.textContent = "Data on";
+      } else {
+        dataChipEl.className = "conn-chip2 off";
+        dataTextEl.textContent = "Data off";
+      }
+      if (latest.data.simPresent === true) {
+        simChipEl.className = "conn-chip2";
+        simTextEl.textContent = "SIM present";
+      } else if (latest.data.simPresent === false) {
+        simChipEl.className = "conn-chip2 off";
+        simTextEl.textContent = "No SIM";
+      } else {
+        simChipEl.className = "conn-chip2 off";
+        simTextEl.textContent = "SIM unknown";
+      }
 
-      // Live distance + bearing from your own current position
+      const pending = latest.data.pendingWrites;
+      if (typeof pending === "number" && pending > 0) {
+        syncCardEl.className = "sync-row card pending";
+        syncTextEl.textContent = `Notebook: ${pending} pending`;
+        syncSubEl.textContent = `${pending} point${pending === 1 ? "" : "s"} queued`;
+      } else {
+        syncCardEl.className = "sync-row card";
+        syncTextEl.textContent = "Notebook synced";
+        syncSubEl.textContent = "All points sent, nothing queued";
+      }
+
+      directionsActionBtn.disabled = false;
+      directionsActionBtn.onclick = () => {
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${latest.data.lat},${latest.data.lng}&travelmode=driving`, "_blank", "noopener");
+      };
+      recenterBtn.classList.add("has-target");
+
       if (myLat !== null && myLng !== null) {
         const dist = haversineMeters(myLat, myLng, latest.data.lat, latest.data.lng);
         const dir = bearingCompass(myLat, myLng, latest.data.lat, latest.data.lng);
-        const distText = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`;
-        myDistanceEl.textContent = `${distText} ${dir} from you`;
+        if (dist < 5) {
+          latestDist = "Here"; latestBearing = "";
+        } else {
+          latestDist = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`;
+          latestBearing = dir;
+        }
       } else {
-        myDistanceEl.textContent = "";
+        latestDist = ""; latestBearing = "";
       }
-    }, (err) => {
-      console.error(err);
-    });
+      updateDeviceSub();
+    }, (err) => console.error(err));
   }
 
   function subscribePhotos() {
-    const sessionFilter = sessionSelect.value;
     if (unsubPhotos) unsubPhotos();
-
     let query = db.collection("photos").orderBy("capturedAt", "desc").limit(20);
     if (sessionFilter) query = query.where("sessionId", "==", sessionFilter);
-
     unsubPhotos = query.onSnapshot((snap) => {
       if (snap.empty) {
         photoListEl.innerHTML = '<div class="empty-note">No photos received yet.</div>';
@@ -472,37 +724,18 @@
       snap.forEach((doc) => {
         const d = doc.data();
         const capturedAt = d.capturedAt?.toDate ? d.capturedAt.toDate() : null;
-        const card = document.createElement("div");
-        card.className = "photo-card";
-        card.innerHTML = `
-          <img src="${d.dataUrl}" alt="capture">
-          <div class="ts">${capturedAt ? capturedAt.toLocaleString() : "pending timestamp"}</div>
-        `;
-        photoListEl.appendChild(card);
+        const ageText = capturedAt ? formatRelativeTime(Date.now() - capturedAt.getTime()) : "pending";
+        const facing = d.facing === "front" ? "Front" : d.facing === "back" ? "Back" : "Photo";
+        const caption = `${facing} · ${ageText}`;
+        const wrap = document.createElement("div");
+        wrap.className = "photo-thumb";
+        wrap.innerHTML = `<img src="${d.dataUrl}" alt="capture"><div class="cap">${caption}</div>`;
+        wrap.querySelector("img").addEventListener("click", () => openLightbox(d.dataUrl, `${caption}${capturedAt ? " · " + capturedAt.toLocaleString() : ""}`));
+        photoListEl.appendChild(wrap);
       });
-    }, (err) => {
-      console.error(err);
-    });
+    }, (err) => console.error(err));
   }
-
-  function refreshSessionOptions() {
-    const existing = new Set(Array.from(sessionSelect.options).map((o) => o.value));
-    knownSessions.forEach((sid) => {
-      if (!existing.has(sid)) {
-        const opt = document.createElement("option");
-        opt.value = sid;
-        opt.textContent = sid;
-        sessionSelect.appendChild(opt);
-      }
-    });
-  }
-
-  sessionSelect.addEventListener("change", () => {
-    subscribeLocations();
-    subscribePhotos();
-  });
 })();
 </script>
-
 </body>
 </html>
