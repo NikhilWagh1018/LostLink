@@ -61,7 +61,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
 .leaflet-popup-content-wrapper { background: var(--sheet-raised); color: var(--text-light); border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
 .leaflet-popup-content { margin: 10px 12px; }
 .leaflet-popup-tip { background: var(--sheet-raised); }
-.leaflet-popup-close-button { color: var(--text-dim-light) !important; }
 #marker-directions-btn { background: var(--accent); color: #fff; border: none; padding: 9px 16px; border-radius: 10px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; }
 
 /* floating map buttons */
@@ -827,7 +826,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: #0b2620; fon
         popupAnchor: [0, -42]
       });
       currentMarker = L.marker(latest.latlng, { icon: pinIcon }).addTo(map);
-      currentMarker.bindPopup('<button type="button" id="marker-directions-btn">Get directions</button>', { closeButton: true });
+      currentMarker.bindPopup('<button type="button" id="marker-directions-btn">Get directions</button>', { closeButton: false });
       currentMarker.on("popupopen", () => {
         const btn = document.getElementById("marker-directions-btn");
         if (btn) {
